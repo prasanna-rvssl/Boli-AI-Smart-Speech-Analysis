@@ -28,7 +28,7 @@ jobs:
       - run: flutter pub get
         working-directory: frontend
       - name: Build Flutter web app
-        run: flutter build web --release --base-href "/speech-detection-keyword-extraction-system/" --dart-define=API_BASE_URL="${{ vars.API_BASE_URL }}"
+        run: flutter build web --release --base-href "/boli-ai-smart-speech-analysis/" --dart-define=API_BASE_URL="${{ vars.API_BASE_URL }}"
         working-directory: frontend
       - uses: actions/upload-pages-artifact@v4
         with:

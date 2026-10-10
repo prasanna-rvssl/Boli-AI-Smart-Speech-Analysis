@@ -21,6 +21,6 @@ The included Blueprint uses Render's free compute plan. Free services can spin d
 1. In the repository's **Settings → Pages**, choose **GitHub Actions** as the publishing source.
 2. Under **Settings → Secrets and variables → Actions → Variables**, create the repository variable `API_BASE_URL` with the deployed API URL. Include `https://` and omit the trailing slash.
 3. Merge the deployment workflow into `main`, then push a change to `frontend/` or run **Deploy Boli web app** from the Actions tab.
-4. The project Pages URL is `https://prasanna-rvssl.github.io/speech-detection-keyword-extraction-system/`.
+4. The project Pages URL is `https://prasanna-rvssl.github.io/boli-ai-smart-speech-analysis/`.
 
 If `API_BASE_URL` is not set, live microphone recognition still works, but video upload analysis remains unavailable.
