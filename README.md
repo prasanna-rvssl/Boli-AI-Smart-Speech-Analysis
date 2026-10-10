@@ -2,7 +2,7 @@
 
 Boli detects speech and extracts useful keywords from live microphone input or uploaded videos.
 
-**[Open the live demo](https://prasanna-rvssl.github.io/boli-ai-smart-speech-analysis/)**
+**[Open the live demo](https://prasanna-rvssl.github.io/Boli-AI-Smart-Speech-Analysis/)**
 
 ## What it does
 
@@ -16,7 +16,7 @@ Video analysis sends the selected file to the Boli API on Render. The API proces
 
 | Part | Technology | Hosting |
 | --- | --- | --- |
-| Web app | Flutter and Dart | [GitHub Pages](https://prasanna-rvssl.github.io/boli-ai-smart-speech-analysis/) |
+| Web app | Flutter and Dart | [GitHub Pages](https://prasanna-rvssl.github.io/Boli-AI-Smart-Speech-Analysis/) |
 | Live speech recognition | Browser speech recognition | Visitor's browser |
 | Video transcription API | Flask, faster-whisper, CTranslate2 | Render |
 
