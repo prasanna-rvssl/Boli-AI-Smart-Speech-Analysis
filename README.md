@@ -58,7 +58,7 @@ See [`DEPLOYMENT.md`](DEPLOYMENT.md) for setup and hosting notes.
 
 ### Home
 
-<img width="1088" height="558" alt="Boli home screen" src="https://github.com/user-attachments/assets/b10bc1f1-6d6c-4ace-a4c4-2738477032e8" />
+<img width="1063" height="546" alt="Boli home screen" src="assets/boli-home.png" />
 
 ### Live detection
 
