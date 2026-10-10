@@ -4,7 +4,7 @@ services:
     runtime: python
     rootDir: backend
     plan: free
-    buildCommand: pip install "setuptools<82" && pip install --no-build-isolation -r requirements.txt
+    buildCommand: pip install "setuptools<82" wheel && pip install --no-build-isolation -r requirements.txt
     startCommand: gunicorn api:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 300
     healthCheckPath: /health
     envVars:
