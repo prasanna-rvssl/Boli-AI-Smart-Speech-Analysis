@@ -1,107 +1,77 @@
 # Boli — AI Smart Speech Analysis
 
-Boli extracts useful keywords from live microphone speech and uploaded videos. The live microphone feature uses browser speech recognition; video transcription uses the Flask and Whisper API.
+Boli detects speech and extracts useful keywords from live microphone input or uploaded videos.
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for the public web demo setup and deployment notes.
+**[Open the live demo](https://prasanna-rvssl.github.io/boli-ai-smart-speech-analysis/)**
 
----
+## What it does
 
-## Original Project: Speech Detection & Keyword Extraction System
+- **Live detection:** Uses browser speech recognition to show speech keywords in real time, with a camera preview. Microphone and camera access are requested by the browser when you use this feature.
+- **Video analysis:** Upload a video to transcribe its speech with the `faster-whisper` tiny model and extract up to ten keywords.
+- **Simple results:** Filters common filler words and displays the recognized keywords.
 
-## Overview
+Video analysis sends the selected file to the Boli API on Render. The API processes it in a temporary file and removes that file after the request. The upload limit is 100 MB. On Render's free plan, the first request after inactivity can take longer while the service wakes and downloads the model.
 
-The Speech Detection & Keyword Extraction System is a Flutter and Flask based application that extracts meaningful keywords from spoken content.
+## How it is built
 
-The application provides both video upload and live processing capabilities. Users can either upload a video file or use the live mode to capture speech and instantly obtain important keywords from the detected speech.
+| Part | Technology | Hosting |
+| --- | --- | --- |
+| Web app | Flutter and Dart | [GitHub Pages](https://prasanna-rvssl.github.io/boli-ai-smart-speech-analysis/) |
+| Live speech recognition | Browser speech recognition | Visitor's browser |
+| Video transcription API | Flask, faster-whisper, CTranslate2 | Render |
 
----
+## Run locally
 
-## Features
+Requirements: Flutter SDK and Python 3.11.
 
-### Home Page
+Start the API in one terminal:
 
-* Simple navigation interface
-* Access to Upload and Live Processing modules
+```powershell
+cd backend
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+$env:WHISPER_MODEL = "tiny"
+$env:MAX_UPLOAD_MB = "100"
+python -m flask --app api run --host 127.0.0.1 --port 5000
+```
 
-### Upload Page
+Start the Flutter web app in another terminal:
 
-* Upload video files for analysis
-* Automatic speech transcription
-* Keyword extraction from spoken content
-* Instant results display
+```powershell
+cd frontend
+flutter pub get
+flutter run -d chrome --dart-define=API_BASE_URL=http://127.0.0.1:5000
+```
 
-### Live Page
+The microphone feature requires browser support for speech recognition; Chrome and Edge are recommended. Localhost and the deployed site use HTTPS-capable browser contexts for microphone access.
 
-* Real-time speech processing
-* Live keyword generation
-* Continuous speech analysis
+## Deployment
 
----
+- The Render API Blueprint is defined in [`render.yaml`](render.yaml).
+- GitHub Pages is built by [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml).
+- The Pages workflow reads the repository Actions variable `API_BASE_URL` to configure the API endpoint.
 
-## Technology Stack
+See [`DEPLOYMENT.md`](DEPLOYMENT.md) for setup and hosting notes.
 
-### Frontend
+## Screenshots
 
-* Flutter
-* Dart
+### Home
 
-### Backend
+<img width="1088" height="558" alt="Boli home screen" src="https://github.com/user-attachments/assets/b10bc1f1-6d6c-4ace-a4c4-2738477032e8" />
 
-* Flask
-* Python
+### Live detection
 
-### Speech Processing
+<img width="876" height="720" alt="Live speech detection" src="https://github.com/user-attachments/assets/1f0a4fdf-991e-4978-98b8-6482bb915779" />
 
-* OpenAI Whisper
+<img width="1180" height="362" alt="Live keyword results" src="https://github.com/user-attachments/assets/fd4cbc18-7d2b-42c4-be60-f418de5bfb17" />
 
-### Development Tools
+### Video upload and results
 
-* Git
-* GitHub
-* VS Code
+<img width="544" height="383" alt="Video upload" src="https://github.com/user-attachments/assets/77a4a729-90bf-4e9d-9c04-211ae4778d8d" />
 
----
-
-## Workflow
-
-1. User selects Upload Mode or Live Mode.
-2. Speech is captured from video or live input.
-3. Speech is converted into text.
-4. Text is processed and filtered.
-5. Important keywords are extracted.
-6. Keywords are displayed to the user.
-
----
-
-## Applications
-
-* Lecture summarization
-* Meeting keyword extraction
-* Educational content analysis
-* Speech-based information retrieval
-* Accessibility support
-
----
-## Application Screenshots
-
-### Home Page
-<img width="1088" height="558" alt="Screenshot 2026-06-17 164617" src="https://github.com/user-attachments/assets/b10bc1f1-6d6c-4ace-a4c4-2738477032e8" />
-
-### Live Detection
-<img width="876" height="720" alt="Screenshot 2026-06-17 171722" src="https://github.com/user-attachments/assets/1f0a4fdf-991e-4978-98b8-6482bb915779" />
-<img width="1180" height="362" alt="Screenshot 2026-06-17 165115" src="https://github.com/user-attachments/assets/fd4cbc18-7d2b-42c4-be60-f418de5bfb17" />
-
-### Upload Video
-<img width="544" height="383" alt="Screenshot 2026-06-17 165132" src="https://github.com/user-attachments/assets/77a4a729-90bf-4e9d-9c04-211ae4778d8d" />
-
-### Upload Result
-<img width="560" height="422" alt="Screenshot 2026-06-17 165203" src="https://github.com/user-attachments/assets/7bd98932-059b-4242-8dcd-346cfc6dc28f" />
-
-### No Speech Detected
-<img width="558" height="392" alt="Screenshot 2026-06-17 165219" src="https://github.com/user-attachments/assets/522c6758-f600-4d8d-981a-854753b35976" />
+<img width="560" height="422" alt="Video analysis results" src="https://github.com/user-attachments/assets/7bd98932-059b-4242-8dcd-346cfc6dc28f" />
 
 ## Author
 
 Prasanna Ramachandrula
-
-B.Tech Student at GRIET
