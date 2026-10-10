@@ -1,4 +1,12 @@
-# Speech Detection & Keyword Extraction System
+# Boli — AI Smart Speech Analysis
+
+Boli extracts useful keywords from live microphone speech and uploaded videos. The live microphone feature uses browser speech recognition; video transcription uses the Flask and Whisper API.
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the public web demo setup and deployment notes.
+
+---
+
+## Original Project: Speech Detection & Keyword Extraction System
 
 ## Overview
 

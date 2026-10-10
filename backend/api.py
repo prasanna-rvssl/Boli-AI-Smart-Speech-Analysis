@@ -1,126 +1,69 @@
-from flask import Flask, request, jsonify, Response
-import whisper
 import os
-import cv2
-import numpy as np
-import sounddevice as sd
+import tempfile
+
+import whisper
+from flask import Flask, jsonify, request
+from flask_cors import CORS
 
 app = Flask(__name__)
-model = whisper.load_model("base")
+app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_MB", "100")) * 1024 * 1024
 
-# 🔥 CHANGE THIS if camera index different
-CAM_INDEX = 0  
+allowed_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "*").split(",")
+    if origin.strip()
+]
+CORS(app, resources={r"/*": {"origins": allowed_origins}})
 
-# ---------- KEYWORDS ----------
+_model = None
+
+
+def get_model():
+    global _model
+    if _model is None:
+        _model = whisper.load_model(os.getenv("WHISPER_MODEL", "tiny"))
+    return _model
+
+
 def extract_keywords(text):
-    fillers = ["um","uh","hmm","like","you","know","ok","okay"]
+    fillers = {"um", "uh", "hmm", "like", "you", "know", "ok", "okay", "the", "and"}
+    words = []
+    for word in text.lower().split():
+        clean = word.strip(".,!?;:\"'()[]{}")
+        if len(clean) > 2 and clean not in fillers and clean not in words:
+            words.append(clean)
+    return words[:10]
 
-    words = text.lower().split()
-    clean = []
 
-    for w in words:
-        w = w.strip(".,!?")
-        if w not in fillers and len(w) > 2 and w not in clean:
-            clean.append(w)
+@app.get("/health")
+def health():
+    return jsonify({"status": "ok", "service": "Boli speech analysis"})
 
-    return clean[:10]
 
-# ---------- CAMERA INIT ----------
-camera = cv2.VideoCapture(CAM_INDEX, cv2.CAP_DSHOW)
-print("Camera opened:", camera.isOpened())
-
-# ---------- SINGLE FRAME ROUTE ----------
-@app.route('/frame')
-def frame():
-    global camera
-
-    success, frame = camera.read()
-
-    if not success:
-        return "No frame", 500
-
-    # 🔥 FIXED ALIGNMENT
-    frame = cv2.flip(frame, 1)
-    frame = cv2.resize(frame, (640, 480))
-
-    ret, buffer = cv2.imencode(
-        '.jpg',
-        frame,
-        [int(cv2.IMWRITE_JPEG_QUALITY), 70]
-    )
-
-    frame_bytes = buffer.tobytes()
-
-    return Response(frame_bytes, mimetype='image/jpeg')
-# ---------- MIC ----------
-def listen_live():
-    try:
-        duration = 3
-        samplerate = 16000
-
-        print("🎤 Listening...")
-
-        audio = sd.rec(
-    int(duration * samplerate),
-    samplerate=samplerate,
-    channels=1,
-    dtype='float32'
-)
-        sd.wait()
-
-        audio = np.squeeze(audio)
-
-        result = model.transcribe(audio)
-        text = result["text"].strip()
-
-        print("Text:", text)
-        return text
-
-    except Exception as e:
-        print("Mic error:", e)
-        return ""
-
-# ---------- LIVE ----------
-@app.route('/live', methods=['GET'])
-def live():
-    text = listen_live()
-
-    if not text:
-        return jsonify({"keywords": ["No speech detected"]})
-
-    keywords = extract_keywords(text)
-
-    return jsonify({"keywords": keywords})
-
-# ---------- UPLOAD ----------
-@app.route('/upload', methods=['POST'])
+@app.post("/upload")
 def upload():
-    if 'file' not in request.files:
-        return jsonify({"error": "No file"}), 400
+    uploaded = request.files.get("file")
+    if uploaded is None or not uploaded.filename:
+        return jsonify({"error": "Choose a video file to analyze."}), 400
 
-    file = request.files['file']
-    filename = "temp.mp4"
-    file.save(filename)
-
+    suffix = os.path.splitext(uploaded.filename)[1] or ".video"
+    temporary_path = None
     try:
-        result = model.transcribe(filename)
-        text = result["text"].strip()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temporary_file:
+            temporary_path = temporary_file.name
+            uploaded.save(temporary_file)
 
-        if not text:
-            return jsonify({"keywords": ["No speech detected"]})
-
-        keywords = extract_keywords(text)
-
-        return jsonify({"keywords": keywords})
-
-    except Exception as e:
-        print(e)
-        return jsonify({"keywords": ["No speech detected"]})
-
+        result = get_model().transcribe(temporary_path)
+        transcript = result.get("text", "").strip()
+        return jsonify({"transcript": transcript, "keywords": extract_keywords(transcript)})
+    except Exception:
+        app.logger.exception("Video transcription failed")
+        return jsonify({"error": "Video analysis failed. Try a smaller video or try again shortly."}), 500
     finally:
-        if os.path.exists(filename):
-            os.remove(filename)
+        if temporary_path and os.path.exists(temporary_path):
+            os.remove(temporary_path)
 
-# ---------- RUN ----------
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, threaded=True)
+
+@app.errorhandler(413)
+def upload_too_large(_error):
+    return jsonify({"error": "Video is too large. The maximum upload size is 100 MB."}), 413

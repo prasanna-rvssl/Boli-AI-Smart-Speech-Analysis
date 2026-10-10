@@ -1,466 +1,283 @@
-import 'package:flutter/material.dart';
 import 'dart:async';
-import 'package:file_picker/file_picker.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
 
-void main() {
-  runApp(MyApp());
-}
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
-class MyApp extends StatelessWidget {
+const _apiBaseUrl = String.fromEnvironment('API_BASE_URL');
+
+void main() => runApp(const BoliApp());
+
+class BoliApp extends StatelessWidget {
+  const BoliApp({super.key});
+
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: LandingPage(),
-    );
-  }
-}
-class LandingPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey.shade100,
-      body: Center(
-        child: Container(
-          width: 750,
-          padding: EdgeInsets.all(30),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(25),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black12,
-                blurRadius: 10,
-              ),
-            ],
+  Widget build(BuildContext context) => MaterialApp(
+        title: 'Boli — AI Smart Speech Analysis',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF6C4CF1),
+            brightness: Brightness.light,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.record_voice_over,
-                size: 70,
-                color: Colors.blue,
-              ),
-
-              SizedBox(height: 20),
-
-              Text(
-                "Speech Detection & Keyword Extraction System",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-
-              SizedBox(height: 15),
-
-              Text(
-                "Detect speech and extract important keywords from live video or uploaded videos.",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 17,
-                  color: Colors.grey[700],
-                ),
-              ),
-
-              SizedBox(height: 35),
-
-              SizedBox(
-                width: 250,
-                child: ElevatedButton.icon(
-                  icon: Icon(Icons.videocam),
-                  label: Text("Live Detection"),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => HomeScreen(),
-                      ),
-                    );
-                  },
-                ),
-              ),
-
-              SizedBox(height: 15),
-
-              SizedBox(
-                width: 250,
-                child: ElevatedButton.icon(
-                  icon: Icon(Icons.upload_file),
-                  label: Text("Upload Video"),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => UploadScreen(),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
+          useMaterial3: true,
+          scaffoldBackgroundColor: const Color(0xFFF8F7FC),
         ),
-      ),
-    );
-  }
+        home: const BoliHome(),
+      );
 }
 
-// ================= HOME =================
+class BoliHome extends StatefulWidget {
+  const BoliHome({super.key});
 
-class HomeScreen extends StatefulWidget {
   @override
-  _HomeScreenState createState() => _HomeScreenState();
+  State<BoliHome> createState() => _BoliHomeState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  String keywords = "";
-
-  bool isListening = false;
-  bool isSpeechDetected = false;
-
-  int refresh = 0;
-
-  Image? currentFrame;
+class _BoliHomeState extends State<BoliHome> {
+  final _speech = stt.SpeechToText();
+  bool _speechAvailable = false;
+  bool _listening = false;
+  bool _busy = false;
+  String _transcript = '';
+  String _message = 'Tap the microphone and say a few words.';
+  List<String> _keywords = [];
+  Timer? _restartTimer;
+  static const _fillers = {
+    'um', 'uh', 'hmm', 'like', 'you', 'know', 'ok', 'okay', 'the', 'and',
+  };
 
   @override
   void initState() {
     super.initState();
-
-    // 🔥 SMOOTH CAMERA (FIXED)
-    Timer.periodic(Duration(milliseconds: 80), (timer) async {
-      if (!mounted) return;
-
-      final image = Image.network(
-        "http://127.0.0.1:5000/frame?$refresh",
-        fit: BoxFit.cover,
-      );
-
-      await precacheImage(image.image, context);
-
-      setState(() {
-        currentFrame = image;
-        refresh++;
-      });
-    });
+    _initializeSpeech();
   }
 
-  // 🔥 BACKEND CALL
-  Future<void> getLiveKeywords() async {
-    setState(() {
-      isListening = true;
-      keywords = "";
-    });
-
+  Future<void> _initializeSpeech() async {
     try {
-      var response = await http.get(
-        Uri.parse("http://127.0.0.1:5000/live"),
+      final available = await _speech.initialize(
+        onStatus: _onSpeechStatus,
+        onError: (error) {
+          if (!mounted) return;
+          _listening = false;
+          _restartTimer?.cancel();
+          setState(() => _message = 'Microphone error: ${error.errorMsg}');
+        },
       );
-
-      var data = jsonDecode(response.body);
-
-      String result = (data["keywords"] as List).join(", ");
-
-      setState(() {
-        keywords = result;
-        isSpeechDetected = result != "No speech detected";
-        isListening = false;
-      });
-
-    } catch (e) {
-      setState(() {
-        isListening = false;
-      });
+      if (mounted) setState(() => _speechAvailable = available);
+    } catch (_) {
+      if (mounted) setState(() => _speechAvailable = false);
     }
   }
 
-  void stopListening() {
-    setState(() {
-      isListening = false;
-      isSpeechDetected = false;
+  void _onSpeechStatus(String status) {
+    if (!mounted || !_listening || status != 'notListening') return;
+    _restartTimer?.cancel();
+    _restartTimer = Timer(const Duration(milliseconds: 350), () {
+      if (mounted && _listening) _listenAgain();
     });
   }
 
-  void goToUpload() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => UploadScreen()),
+  Future<void> _listenAgain() async {
+    try {
+      await _speech.listen(
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 4),
+        partialResults: true,
+        onResult: (result) {
+          if (!mounted) return;
+          setState(() {
+            _transcript = result.recognizedWords;
+            _keywords = _extractKeywords(_transcript);
+            _message = _transcript.isEmpty
+                ? 'Listening… speak naturally.'
+                : 'Listening… keywords update as you speak.';
+          });
+        },
+      );
+    } catch (_) {
+      if (mounted) setState(() => _message = 'Could not start microphone recognition.');
+    }
+  }
+
+  List<String> _extractKeywords(String text) {
+    final seen = <String>{};
+    for (final word in text.toLowerCase().split(RegExp(r'[^a-z0-9]+'))) {
+      if (word.length > 2 && !_fillers.contains(word)) seen.add(word);
+      if (seen.length == 10) break;
+    }
+    return seen.toList();
+  }
+
+  Future<void> _startListening() async {
+    if (!_speechAvailable) await _initializeSpeech();
+    if (!_speechAvailable) {
+      setState(() => _message = 'Microphone speech recognition is unavailable in this browser. Try Chrome or Edge.');
+      return;
+    }
+    setState(() {
+      _listening = true;
+      _transcript = '';
+      _keywords = [];
+      _message = 'Requesting microphone access…';
+    });
+    await _listenAgain();
+  }
+
+  Future<void> _stopListening() async {
+    _restartTimer?.cancel();
+    _listening = false;
+    await _speech.stop();
+    if (mounted) setState(() => _message = 'Listening stopped.');
+  }
+
+  Future<void> _uploadVideo() async {
+    if (_apiBaseUrl.isEmpty) {
+      setState(() => _message = 'Video analysis is not configured yet. Live microphone analysis is ready.');
+      return;
+    }
+    final selection = await FilePicker.platform.pickFiles(
+      type: FileType.video,
+      withData: true,
     );
+    if (selection == null) return;
+    final file = selection.files.single;
+    final bytes = file.bytes;
+    if (bytes == null) {
+      setState(() => _message = 'This browser could not read the selected video. Try another file.');
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _message = 'Uploading and analyzing ${file.name}…';
+      _keywords = [];
+      _transcript = '';
+    });
+    try {
+      final request = http.MultipartRequest('POST', Uri.parse('$_apiBaseUrl/upload'))
+        ..files.add(http.MultipartFile.fromBytes('file', bytes, filename: file.name));
+      final response = await request.send().timeout(const Duration(minutes: 5));
+      final body = await response.stream.bytesToString();
+      final data = jsonDecode(body) as Map<String, dynamic>;
+      if (response.statusCode >= 400) {
+        throw Exception(data['error'] ?? 'Video analysis failed');
+      }
+      if (!mounted) return;
+      setState(() {
+        _keywords = List<String>.from(data['keywords'] ?? const []);
+        _transcript = data['transcript'] as String? ?? '';
+        _message = _keywords.isEmpty ? 'No speech detected.' : 'Video analysis complete.';
+      });
+    } catch (error) {
+      if (mounted) setState(() => _message = 'Upload failed: $error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _restartTimer?.cancel();
+    _speech.cancel();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
-      body: Center(
-        child: Container(
-          width: 900,
-          padding: EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(25),
-            boxShadow: [
-              BoxShadow(color: Colors.black12, blurRadius: 10)
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-
-              // 🔥 TITLE
-              Text(
-                "Speech Detection & Keyword Extraction System",
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-
-              SizedBox(height: 20),
-
-              // 🔥 CAMERA (UPDATED HERE)
-              Container(
-                height: 400,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(15),
-                  child: currentFrame ??
-                      Center(child: CircularProgressIndicator()),
-                ),
-              ),
-
-              SizedBox(height: 15),
-
-              // 🔥 STATUS INDICATOR
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                decoration: BoxDecoration(
-                  color: isListening
-                      ? Colors.orange
-                      : isSpeechDetected
-                          ? Colors.green
-                          : Colors.red,
-                  borderRadius: BorderRadius.circular(25),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isListening
-                          ? Icons.mic
-                          : isSpeechDetected
-                              ? Icons.volume_up
-                              : Icons.volume_off,
-                      color: Colors.white,
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      isListening
-                          ? "Listening..."
-                          : isSpeechDetected
-                              ? "Speech Detected"
-                              : "No Speech",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 16),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.graphic_eq, color: Color(0xFF6C4CF1), size: 36),
+                      SizedBox(width: 10),
+                      Text('Boli', style: TextStyle(fontSize: 36, fontWeight: FontWeight.w800, letterSpacing: -1)),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text('AI Smart Speech Analysis', textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16, color: Colors.grey.shade700)),
+                  const SizedBox(height: 30),
+                  Card(
+                    elevation: 0,
+                    color: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                    child: Padding(
+                      padding: EdgeInsets.all(width < 500 ? 20 : 32),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text('Turn speech into key ideas', style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 8),
+                          Text('Speak into your microphone for live keywords, or choose a video to analyze.',
+                              style: TextStyle(color: Colors.grey.shade700, height: 1.5)),
+                          const SizedBox(height: 26),
+                          Wrap(
+                            alignment: WrapAlignment.center,
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: [
+                              FilledButton.icon(
+                                onPressed: _listening ? _stopListening : _startListening,
+                                icon: Icon(_listening ? Icons.stop : Icons.mic),
+                                label: Text(_listening ? 'Stop listening' : 'Start listening'),
+                                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16)),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: _busy ? null : _uploadVideo,
+                                icon: const Icon(Icons.video_file_outlined),
+                                label: const Text('Analyze a video'),
+                                style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16)),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(color: const Color(0xFFF2EFFD), borderRadius: BorderRadius.circular(14)),
+                            child: Row(children: [
+                              if (_busy) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                              else Icon(_listening ? Icons.hearing : Icons.info_outline, color: const Color(0xFF6C4CF1)),
+                              const SizedBox(width: 10),
+                              Expanded(child: Text(_message, style: const TextStyle(height: 1.4))),
+                            ]),
+                          ),
+                          if (_transcript.isNotEmpty) ...[
+                            const SizedBox(height: 22),
+                            const Text('What Boli heard', style: TextStyle(fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 8),
+                            Text(_transcript, style: TextStyle(color: Colors.grey.shade800, height: 1.5)),
+                          ],
+                          const SizedBox(height: 22),
+                          const Text('KEYWORDS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.2, color: Color(0xFF6C4CF1))),
+                          const SizedBox(height: 12),
+                          if (_keywords.isEmpty)
+                            Text('Your key words will show up here.', style: TextStyle(color: Colors.grey.shade600))
+                          else
+                            Wrap(spacing: 8, runSpacing: 8, children: _keywords.map((word) => Chip(label: Text(word))).toList()),
+                        ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-
-              SizedBox(height: 20),
-
-              // 🔥 BUTTONS
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: isListening ? null : getLiveKeywords,
-                    icon: Icon(Icons.play_arrow),
-                    label: Text("Start Detection"),
                   ),
-                  SizedBox(width: 15),
-                  ElevatedButton.icon(
-                    onPressed: isListening ? stopListening : null,
-                    icon: Icon(Icons.stop),
-                    label: Text("Stop"),
-                  ),
+                  const SizedBox(height: 16),
+                  Text('Microphone access is requested only when you start listening. Browser speech recognition availability varies.',
+                      textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                 ],
               ),
-
-              SizedBox(height: 20),
-
-              // 🔥 KEYWORDS BOX
-              Container(
-                width: double.infinity,
-                padding: EdgeInsets.all(25),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Text(
-                  keywords.isEmpty ? "Keywords: ..." : keywords,
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-
-              SizedBox(height: 20),
-
-              // 🔥 UPLOAD BUTTON
-              ElevatedButton.icon(
-  onPressed: () {
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(
-        builder: (_) => LandingPage(),
-      ),
-      (route) => false,
-    );
-  },
-  icon: Icon(Icons.home),
-  label: Text("Home"),
-),
-            
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-   
-
-
-// ================= UPLOAD =================
-
-class UploadScreen extends StatefulWidget {
-  @override
-  _UploadScreenState createState() => _UploadScreenState();
-}
-
-class _UploadScreenState extends State<UploadScreen> {
-  String status = "No file selected";
-  String keywords = "";
-  String? selectedFileName;
-
-  Future<void> pickFile() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.video,
-    );
-
-    if (result == null) return;
-
-    String path = result.files.single.path!;
-    selectedFileName = result.files.single.name;
-
-    setState(() {
-      status = "Uploading...";
-      keywords = "";
-    });
-
-    try {
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse("http://127.0.0.1:5000/upload"),
-      );
-
-      request.files.add(await http.MultipartFile.fromPath('file', path));
-
-      var response = await request.send();
-      var responseBody = await response.stream.bytesToString();
-
-      var data = jsonDecode(responseBody);
-
-      setState(() {
-        status = "Processing...";
-      });
-
-      await Future.delayed(Duration(seconds: 1));
-
-      setState(() {
-        keywords = (data["keywords"] as List).join(", ");
-        status = "Done";
-      });
-
-    } catch (e) {
-      setState(() {
-        status = "Upload failed";
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey.shade100,
-      body: Center(
-        child: Container(
-          width: 400,
-          padding: EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(25),
-            boxShadow: [
-              BoxShadow(color: Colors.black12, blurRadius: 10)
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-
-              Text(
-                "Upload Video",
-                style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold),
-              ),
-
-              SizedBox(height: 20),
-
-              ElevatedButton(
-                onPressed: pickFile,
-                child: Text("Select Video"),
-              ),
-
-              SizedBox(height: 15),
-
-              if (status == "Uploading..." || status == "Processing...")
-                CircularProgressIndicator(),
-
-              SizedBox(height: 10),
-
-              Text(status),
-
-              SizedBox(height: 20),
-
-              if (keywords.isNotEmpty)
-                Text(keywords),
-
-              SizedBox(height: 20),
-
-              ElevatedButton.icon(
-  onPressed: () {
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(
-        builder: (_) => LandingPage(),
-      ),
-      (route) => false,
-    );
-  },
-  icon: Icon(Icons.home),
-  label: Text("Home"),
-),
-            ],
+            ),
           ),
         ),
       ),

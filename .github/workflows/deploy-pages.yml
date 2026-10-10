@@ -1,0 +1,48 @@
+name: Deploy Boli web app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - uses: actions/configure-pages@v5
+      - run: flutter pub get
+        working-directory: frontend
+      - name: Build Flutter web app
+        run: flutter build web --release --base-href "/speech-detection-keyword-extraction-system/" --dart-define=API_BASE_URL="${{ vars.API_BASE_URL }}"
+        working-directory: frontend
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: frontend/build/web
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
