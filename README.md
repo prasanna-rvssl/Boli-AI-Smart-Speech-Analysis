@@ -72,6 +72,4 @@ See [`DEPLOYMENT.md`](DEPLOYMENT.md) for setup and hosting notes.
 
 <img width="560" height="422" alt="Video analysis results" src="https://github.com/user-attachments/assets/7bd98932-059b-4242-8dcd-346cfc6dc28f" />
 
-## Author
 
-Prasanna Ramachandrula
