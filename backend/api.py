@@ -1,7 +1,7 @@
 import os
 import tempfile
 
-import whisper
+from faster_whisper import WhisperModel
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
@@ -21,7 +21,12 @@ _model = None
 def get_model():
     global _model
     if _model is None:
-        _model = whisper.load_model(os.getenv("WHISPER_MODEL", "tiny"))
+        _model = WhisperModel(
+            os.getenv("WHISPER_MODEL", "tiny"),
+            device="cpu",
+            compute_type="int8",
+            cpu_threads=1,
+        )
     return _model
 
 
@@ -53,8 +58,8 @@ def upload():
             temporary_path = temporary_file.name
             uploaded.save(temporary_file)
 
-        result = get_model().transcribe(temporary_path)
-        transcript = result.get("text", "").strip()
+        segments, _info = get_model().transcribe(temporary_path, beam_size=1)
+        transcript = " ".join(segment.text.strip() for segment in segments).strip()
         return jsonify({"transcript": transcript, "keywords": extract_keywords(transcript)})
     except Exception:
         app.logger.exception("Video transcription failed")
